@@ -46,14 +46,31 @@ function Get-FolderSizeMB([string]$path) {
 function Remove-FolderSafe([string]$path, [string]$label) {
     if (-not (Test-Path $path)) { Write-Skip $label; return 0 }
     $mb = Get-FolderSizeMB $path
-    try {
-        Remove-Item $path -Recurse -Force -ErrorAction Stop
+
+    # Tomar propiedad completa
+    & takeown /F "$path" /R /A /D S 2>&1 | Out-Null
+    & icacls "$path" /grant "*S-1-5-32-544:F" /T /C /Q 2>&1 | Out-Null
+
+    # Vaciar con robocopy (mas efectivo que rd para archivos bloqueados)
+    $empty = Join-Path $env:TEMP ("empty_" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $empty -Force | Out-Null
+    & robocopy $empty $path /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:0 2>&1 | Out-Null
+    Remove-Item $empty -Force -ErrorAction SilentlyContinue
+
+    # Eliminar la carpeta ya vacia
+    & cmd /c "rd /s /q `"$path`"" 2>&1 | Out-Null
+    Start-Sleep -Milliseconds 500
+
+    if (-not (Test-Path $path)) {
         Write-OK ("{0}  ({1} MB)" -f $label, $mb)
         return $mb
-    } catch {
-        Write-Fail "No se pudo eliminar: $label"
-        return 0
     }
+
+    # Ultimo recurso: marcar para borrar al reiniciar
+    $null = (New-Object -ComObject Scripting.FileSystemObject)
+    Write-Fail "Marcada para eliminar al reiniciar: $label"
+    & reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager" /v PendingFileRenameOperations /t REG_MULTI_SZ /d "`\??\$path" /f 2>&1 | Out-Null
+    return 0
 }
 
 function Remove-FilesSafe([string]$directory, [string[]]$patterns, [string]$label) {
@@ -112,6 +129,35 @@ if ($confirm -ne 's' -and $confirm -ne 'S') {
 
 Write-Host ""
 $totalMB = 0.0
+
+# ── 0. Detener procesos y servicios de Autodesk ───────────────────────────────
+
+Write-Step "Deteniendo procesos de Autodesk"
+$todosLosProcesos = Get-Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.Name -match '(?i)(adsk|autodesk|autocad|acad|fnplicensing|adlm|genuineservice)' -or
+    ($_.Path -and $_.Path -match '(?i)autodesk')
+}
+foreach ($p in $todosLosProcesos) {
+    Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    Write-OK "Proceso detenido: $($p.Name)"
+}
+Start-Sleep -Seconds 2
+
+Write-Step "Deteniendo servicios de Autodesk"
+$servicios = @('AdskLicensing','FNPLicensingService','AdskAccessServiceHost',
+               'SketchUpDesktop','AdskIdentityManager')
+foreach ($s in $servicios) {
+    $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
+    if ($svc -and $svc.Status -eq 'Running') {
+        Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
+        Write-OK "Servicio detenido: $s"
+    }
+    if ($svc) {
+        Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue
+    }
+}
+
+Start-Sleep -Seconds 2
 
 # ── 1. Carpetas en AppData ────────────────────────────────────────────────────
 
