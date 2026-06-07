@@ -101,7 +101,7 @@ if (-not $esAdmin) {
 }
 
 Write-Host "  Este script eliminara:" -ForegroundColor White
-Write-Host "   - Carpetas de Autodesk en AppData y ProgramData" -ForegroundColor DarkGray
+Write-Host "   - Carpetas de Autodesk en AppData, ProgramData y Program Files" -ForegroundColor DarkGray
 Write-Host "   - Archivos temporales de AutoCAD (.bak, .sv`$, .ac`$, .log)" -ForegroundColor DarkGray
 Write-Host "   - Entradas de registro de Autodesk" -ForegroundColor DarkGray
 Write-Host ""
@@ -116,16 +116,24 @@ $totalMB = 0.0
 # ── 1. Carpetas en AppData ────────────────────────────────────────────────────
 
 Write-Step "Carpetas en AppData\Roaming"
-$totalMB += Remove-FolderSafe "$env:APPDATA\Autodesk"          "AppData\Roaming\Autodesk"
+$totalMB += Remove-FolderSafe "$env:APPDATA\Autodesk"                              "AppData\Roaming\Autodesk"
 
 Write-Step "Carpetas en AppData\Local"
-$totalMB += Remove-FolderSafe "$env:LOCALAPPDATA\Autodesk"     "AppData\Local\Autodesk"
+$totalMB += Remove-FolderSafe "$env:LOCALAPPDATA\Autodesk"                         "AppData\Local\Autodesk"
 
 Write-Step "Carpetas en ProgramData"
-$totalMB += Remove-FolderSafe "$env:ProgramData\Autodesk"      "ProgramData\Autodesk"
+$totalMB += Remove-FolderSafe "$env:ProgramData\Autodesk"                          "ProgramData\Autodesk"
 
 Write-Step "Carpetas en Public\Documents"
-$totalMB += Remove-FolderSafe "$env:PUBLIC\Documents\Autodesk" "Public\Documents\Autodesk"
+$totalMB += Remove-FolderSafe "$env:PUBLIC\Documents\Autodesk"                     "Public\Documents\Autodesk"
+
+Write-Step "Carpetas en Program Files"
+$totalMB += Remove-FolderSafe "$env:ProgramFiles\Autodesk"                         "Program Files\Autodesk"
+$totalMB += Remove-FolderSafe "$env:ProgramFiles\Common Files\Autodesk Shared"     "Program Files\Common Files\Autodesk Shared"
+
+Write-Step "Carpetas en Program Files (x86)"
+$totalMB += Remove-FolderSafe "${env:ProgramFiles(x86)}\Autodesk"                  "Program Files (x86)\Autodesk"
+$totalMB += Remove-FolderSafe "${env:ProgramFiles(x86)}\Common Files\Autodesk Shared" "Program Files (x86)\Common Files\Autodesk Shared"
 
 # ── 2. Archivos temporales ────────────────────────────────────────────────────
 
