@@ -3,8 +3,13 @@ param([string]$VaultPath = "$env:USERPROFILE\.boveda\vault.enc")
 
 Set-StrictMode -Off
 
-# PIN fijo — almacenado como hash SHA-256, no puede cambiarse
-$PIN_HASH = '+/auC84+sYJW0iAFvRzJleY542THi6VY7BSi56RAm68='
+# PIN fijo — hash cargado desde archivo local, no incluido en el repositorio
+$pinHashFile = Join-Path (Split-Path $VaultPath) 'pin.hash'
+if (-not (Test-Path $pinHashFile)) {
+    Write-Host "  ERROR: Archivo de PIN no encontrado en: $pinHashFile" -ForegroundColor Red
+    exit 1
+}
+$PIN_HASH = (Get-Content $pinHashFile -Raw).Trim()
 
 # ── Criptografia ─────────────────────────────────────────────────────────────
 
