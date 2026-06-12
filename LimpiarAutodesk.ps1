@@ -94,6 +94,36 @@ function Remove-RegistrySubkeysByPattern([string]$parent, [string]$pattern) {
         }
 }
 
+# Borra entradas de Agregar/Quitar programas que coincidan con el patron
+function Remove-UninstallEntries([string]$pattern) {
+    $roots = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    foreach ($root in $roots) {
+        Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object {
+            $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+            if ($p.DisplayName -match $pattern) {
+                try { Remove-Item $_.PSPath -Recurse -Force -ErrorAction Stop; Write-OK "Uninstall: $($p.DisplayName)" }
+                catch { Write-Fail "Sin permisos: $($p.DisplayName)" }
+            }
+        }
+    }
+}
+
+# Borra entradas de la base de datos MSI que coincidan con el patron
+function Remove-MSIEntries([string]$pattern) {
+    $msiRoot = 'HKLM:\SOFTWARE\Classes\Installer\Products'
+    if (-not (Test-Path $msiRoot)) { return }
+    Get-ChildItem $msiRoot -ErrorAction SilentlyContinue | ForEach-Object {
+        $p = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+        if ($p.ProductName -match $pattern) {
+            try { Remove-Item $_.PSPath -Recurse -Force -ErrorAction Stop; Write-OK "MSI: $($p.ProductName)" }
+            catch { Write-Fail "Sin permisos MSI: $($p.ProductName)" }
+        }
+    }
+}
+
 # ── Admin check ───────────────────────────────────────────────────────────────
 
 $esAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -227,10 +257,37 @@ if ($limpiarTodo) {
     Remove-RegistryKey "HKLM:\SOFTWARE\WOW6432Node\Autodesk"                 "HKLM:\SOFTWARE\WOW6432Node\Autodesk"
     Remove-RegistryKey "HKLM:\SOFTWARE\FLEXlm License Manager"               "HKLM:\SOFTWARE\FLEXlm License Manager"
     Remove-RegistryKey "HKLM:\SOFTWARE\WOW6432Node\FLEXlm License Manager"   "HKLM:\SOFTWARE\WOW6432Node\FLEXlm License Manager"
+    Remove-UninstallEntries '(?i)(autodesk|autocad|revit)'
+    Remove-MSIEntries       '(?i)(autodesk|autocad|revit)'
 } else {
     $patReg = if ($limpiarAutoCAD) { '(?i)(autocad|acad)' } else { '(?i)(revit|rvt)' }
     foreach ($root in @('HKCU:\Software\Autodesk','HKLM:\SOFTWARE\Autodesk','HKLM:\SOFTWARE\WOW6432Node\Autodesk')) {
         Remove-RegistrySubkeysByPattern $root $patReg
+    }
+    Remove-UninstallEntries $patReg
+    Remove-MSIEntries       $patReg
+}
+
+# ── 4. Accesos directos del menu inicio ──────────────────────────────────────
+
+Write-Step "Accesos directos del menu inicio"
+
+$startMenu = 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Autodesk'
+if ($limpiarTodo) {
+    Remove-FolderSafe $startMenu "Menu Inicio\Autodesk" | Out-Null
+} else {
+    $patLnk = if ($limpiarAutoCAD) { '(?i)(autocad|acad)' } else { '(?i)(revit|rvt)' }
+    if (Test-Path $startMenu) {
+        # Borrar .lnk que coincidan
+        Get-ChildItem $startMenu -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match $patLnk } |
+            ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue; Write-OK "Acceso directo: $($_.Name)" }
+        # Borrar subcarpetas que coincidan
+        Get-ChildItem $startMenu -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match $patLnk } |
+            ForEach-Object { Remove-FolderSafe $_.FullName "Menu Inicio\$($_.Name)" | Out-Null }
+    } else {
+        Write-Skip "Menu Inicio\Autodesk"
     }
 }
 
