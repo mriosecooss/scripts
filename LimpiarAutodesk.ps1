@@ -117,14 +117,43 @@ if (-not $esAdmin) {
     Write-Host ""
 }
 
-Write-Host "  Este script eliminara:" -ForegroundColor White
-Write-Host "   - Carpetas de Autodesk en AppData, ProgramData y Program Files" -ForegroundColor DarkGray
-Write-Host "   - Archivos temporales de AutoCAD (.bak, .sv`$, .ac`$, .log)" -ForegroundColor DarkGray
-Write-Host "   - Entradas de registro de Autodesk" -ForegroundColor DarkGray
-Write-Host ""
-$confirm = Read-Host "  Continuar? (s/n)"
-if ($confirm -ne 's' -and $confirm -ne 'S') {
-    Write-Host "  Cancelado." -ForegroundColor DarkGray; exit 0
+# Detectar versiones de AutoCAD instaladas
+$instaladas = @()
+$uninstallPaths = @(
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+)
+foreach ($p in $uninstallPaths) {
+    Get-ChildItem $p -ErrorAction SilentlyContinue | ForEach-Object {
+        $props = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+        if ($props.DisplayName -like '*AutoCAD*' -and $props.DisplayVersion) {
+            $instaladas += $props.DisplayName
+        }
+    }
+}
+
+if ($instaladas.Count -gt 0) {
+    Write-Host "  ATENCION: Se detectaron versiones de AutoCAD instaladas:" -ForegroundColor Red
+    $instaladas | Select-Object -Unique | ForEach-Object { Write-Host "   - $_" -ForegroundColor Yellow }
+    Write-Host ""
+    Write-Host "  Este script eliminara TODOS los archivos de Autodesk." -ForegroundColor Red
+    Write-Host "  Usalo solo si ya desinstalaste todo desde Panel de Control." -ForegroundColor Red
+    Write-Host ""
+    $confirma2 = Read-Host "  Escribi CONFIRMAR para continuar de todos modos"
+    if ($confirma2 -ne 'CONFIRMAR') {
+        Write-Host "  Cancelado. Desinstala AutoCAD desde Panel de Control primero." -ForegroundColor DarkGray
+        exit 0
+    }
+} else {
+    Write-Host "  Este script eliminara:" -ForegroundColor White
+    Write-Host "   - Carpetas de Autodesk en AppData, ProgramData y Program Files" -ForegroundColor DarkGray
+    Write-Host "   - Archivos temporales de AutoCAD (.bak, .sv`$, .ac`$, .log)" -ForegroundColor DarkGray
+    Write-Host "   - Entradas de registro de Autodesk" -ForegroundColor DarkGray
+    Write-Host ""
+    $confirm = Read-Host "  Continuar? (s/n)"
+    if ($confirm -ne 's' -and $confirm -ne 'S') {
+        Write-Host "  Cancelado." -ForegroundColor DarkGray; exit 0
+    }
 }
 
 Write-Host ""
